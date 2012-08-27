@@ -19,4 +19,5 @@ obj-$(CONFIG_SND_DM6467_SOC_EVM) += snd-soc-evm.o
 obj-$(CONFIG_SND_DA830_SOC_EVM) += snd-soc-evm.o
 obj-$(CONFIG_SND_DA850_SOC_EVM) += snd-soc-evm.o
 obj-$(CONFIG_SND_AM335X_SOC_EVM) += snd-soc-evm.o
+obj-$(CONFIG_SND_IPC335X_SOC) += snd-soc-evm.o
 obj-$(CONFIG_SND_DAVINCI_SOC_SFFSDR) += snd-soc-sffsdr.o

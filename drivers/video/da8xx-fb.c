@@ -290,6 +290,20 @@ static struct da8xx_panel known_lcd_panels[] = {
 		.pxl_clk = 9000000,
 		.invert_pxl_clk = 0,
 	},
+	/* Innolux AT070TN83_V1 */
+	[4] = {
+		.name = "ilx_at070tn83_v1",
+		.width = 800,
+		.height = 480,
+		.hfp = 1,
+		.hbp = 1,
+		.hsw = 48,
+		.vfp = 12,
+		.vbp = 25,
+		.vsw = 3,
+		.pxl_clk = 30000000,
+		.invert_pxl_clk = 0,
+	},
 };
 
 static inline bool is_raster_enabled(void)

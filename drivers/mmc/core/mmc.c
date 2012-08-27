@@ -1273,6 +1273,7 @@ int mmc_attach_mmc(struct mmc_host *host)
 		mmc_set_bus_mode(host, MMC_BUSMODE_OPENDRAIN);
 
 	err = mmc_send_op_cond(host, 0, &ocr);
+printk("%s.1:%d\n", __func__, err);
 	if (err)
 		return err;
 
@@ -1285,6 +1286,7 @@ int mmc_attach_mmc(struct mmc_host *host)
 	 */
 	if (mmc_host_is_spi(host)) {
 		err = mmc_spi_read_ocr(host, 1, &ocr);
+printk("%s.2:%d\n", __func__, err);
 		if (err)
 			goto err;
 	}
@@ -1301,12 +1303,13 @@ int mmc_attach_mmc(struct mmc_host *host)
 	}
 
 	host->ocr = mmc_select_voltage(host, ocr);
-
+printk("hoct%x ocr%x\n", host->ocr, ocr);
 	/*
 	 * Can we support the voltage of the card?
 	 */
 	if (!host->ocr) {
 		err = -EINVAL;
+printk("%s.3:%d\n", __func__, err);
 		goto err;
 	}
 
@@ -1314,12 +1317,14 @@ int mmc_attach_mmc(struct mmc_host *host)
 	 * Detect and init the card.
 	 */
 	err = mmc_init_card(host, host->ocr, NULL);
+printk("%s.4:%d\n", __func__, err);
 	if (err)
 		goto err;
 
 	mmc_release_host(host);
 	err = mmc_add_card(host->card);
 	mmc_claim_host(host);
+printk("%s.5:%d\n", __func__, err);
 	if (err)
 		goto remove_card;
 

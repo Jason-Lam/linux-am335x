@@ -342,6 +342,13 @@ config MACH_AM335XIAEVM
 	depends on SOC_OMAPAM33XX
 	default y
 
+config MACH_IPC335X
+	bool "IPC335X Industrial Module"
+	depends on SOC_OMAPAM33XX
+	default y
+	help
+	  AM335X based industrial embedded control module
+
 config MACH_OMAP_4430SDP
 	bool "OMAP 4430 SDP board"
 	default y
