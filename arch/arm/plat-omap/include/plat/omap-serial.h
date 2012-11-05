@@ -136,6 +136,11 @@ struct uart_omap_port {
 	u32			latency;
 	u32			calc_latency;
 	struct work_struct	qos_work;
+	struct serial_rs485     rs485;
+	unsigned int            tx_in_progress:1, tx_wait_end:1;
+	unsigned int		rts_gpio;
 };
+
+extern int uart_omap_port_set_rts_gpio(int port_num, int gpio);
 
 #endif /* __OMAP_SERIAL_H__ */

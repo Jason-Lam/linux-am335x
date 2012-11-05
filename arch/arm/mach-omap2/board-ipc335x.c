@@ -48,6 +48,7 @@
 #include <plat/usb.h>
 #include <plat/mmc.h>
 #include <plat/emif.h>
+#include <plat/omap-serial.h>
 
 #include "cpuidle33xx.h"
 #include "mux.h"
@@ -685,6 +686,27 @@ static void gpio_key_init(int board_type, u8 profile)
 		pr_err("failed to register gpio key device\n");
 }
 
+/* Module pin mux for RS485 */
+static struct pinmux_config rs485_pin_mux[] = {
+	{"spi0_sclk.uart2_rxd", OMAP_MUX_MODE1 | AM33XX_SLEWCTRL_SLOW |
+						AM33XX_PIN_INPUT_PULLUP},
+	{"spi0_d0.uart2_txd", OMAP_MUX_MODE1 | AM33XX_PULL_UP |
+						AM33XX_PULL_DISA |
+						AM33XX_SLEWCTRL_SLOW},
+	/* flow ctrl gpio */
+	{"xdma_event_intr0.gpio0_19", OMAP_MUX_MODE7 | AM33XX_PIN_OUTPUT},
+	{NULL, 0},
+};
+
+/* setup RS485 */
+static void rs485_init(int board_type, u8 profile)
+{
+	int flow_ctrl_gpio = GPIO_TO_PIN(0, 19);
+	setup_pin_mux(rs485_pin_mux);
+	uart_omap_port_set_rts_gpio(2, flow_ctrl_gpio);
+	return;
+}
+
 #define IPC335X_CORE_PHY_ID		0x4dd074
 #define IPC335X_PHY_MASK		0xfffffffe
 #define AR80XX_PHY_DEBUG_ADDR_REG	0x1d
@@ -708,7 +730,6 @@ static struct ipc335x_dev_cfg ipc335x_core_dev_cfg[] = {
 	{led_init, IPC335X_CORE, PROFILE_ALL},
 	{NULL, 0, 0},
 };
-//	rs485_init(0, 0);
 
 static struct ipc335x_dev_cfg ipc335x_evm_dev_cfg[] = {
 	{mmc1_init, IPC335X_EVM, PROFILE_ALL},
@@ -720,6 +741,7 @@ static struct ipc335x_dev_cfg ipc335x_evm_dev_cfg[] = {
 	{tsc_init, IPC335X_EVM, PROFILE_0},
 	{enable_ecap2, IPC335X_EVM, PROFILE_0},
 	{gpio_key_init, IPC335X_EVM, PROFILE_0},
+	{rs485_init, IPC335X_EVM, PROFILE_0},
 	{NULL, 0, 0},
 };
 
@@ -1037,29 +1059,6 @@ static void __init am33xx_cpuidle_init(void)
 	if (ret)
 		pr_warning("AM33XX cpuidle registration failed\n");
 
-}
-
-/* Module pin mux for RS485 */
-static struct pinmux_config rs485_pin_mux[] = {
-	{"spi0_sclk.uart2_rxd", OMAP_MUX_MODE1 | AM33XX_SLEWCTRL_SLOW |
-						AM33XX_PIN_INPUT_PULLUP},
-	{"spi0_d0.uart2_txd", OMAP_MUX_MODE1 | AM33XX_PULL_UP |
-						AM33XX_PULL_DISA |
-						AM33XX_SLEWCTRL_SLOW},
-	/* flow ctrl gpio */
-	{"xdma_event_intr0.gpio0_19", OMAP_MUX_MODE7 | AM33XX_PIN_OUTPUT},
-	{NULL, 0},
-};
-
-/* setup RS485 */
-static void rs485_init(int evm_id, int profile)
-{
-	int flow_ctrl_gpio = GPIO_TO_PIN(0, 19);
-	gpio_request(flow_ctrl_gpio, "RS485_flow_ctrl");
-	gpio_direction_output(flow_ctrl_gpio, 1);
-	gpio_export(flow_ctrl_gpio, 0);
-	setup_pin_mux(rs485_pin_mux);
-	return;
 }
 
 static void __init ipc335x_init(void)
