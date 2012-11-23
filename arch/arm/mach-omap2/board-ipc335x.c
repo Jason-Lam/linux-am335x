@@ -30,6 +30,9 @@
 #include <linux/input.h>
 #include <linux/input/ti_tscadc.h>
 #include <linux/gpio_keys.h>
+#include <linux/mtd/mtd.h>
+#include <linux/mtd/nand.h>
+#include <linux/mtd/partitions.h>
 
 /* LCD controller is similar to DA850 */
 #include <video/da8xx-fb.h>
@@ -49,12 +52,14 @@
 #include <plat/mmc.h>
 #include <plat/emif.h>
 #include <plat/omap-serial.h>
+#include <plat/nand.h>
 
 #include "cpuidle33xx.h"
 #include "mux.h"
 #include "devices.h"
 #include "hsmmc.h"
 #include "common.h"
+#include "board-flash.h"
 
 /* Convert GPIO signal to GPIO pin number */
 #define GPIO_TO_PIN(bank, gpio) (32 * (bank) + (gpio))
@@ -705,6 +710,115 @@ static void rs485_init(int board_type, u8 profile)
 	setup_pin_mux(rs485_pin_mux);
 	uart_omap_port_set_rts_gpio(2, flow_ctrl_gpio);
 	return;
+}
+
+/* Pin mux for nand flash module */
+static struct pinmux_config nand_pin_mux[] = {
+	{"gpmc_ad0.gpmc_ad0",	  OMAP_MUX_MODE0 | AM33XX_PIN_INPUT_PULLUP},
+	{"gpmc_ad1.gpmc_ad1",	  OMAP_MUX_MODE0 | AM33XX_PIN_INPUT_PULLUP},
+	{"gpmc_ad2.gpmc_ad2",	  OMAP_MUX_MODE0 | AM33XX_PIN_INPUT_PULLUP},
+	{"gpmc_ad3.gpmc_ad3",	  OMAP_MUX_MODE0 | AM33XX_PIN_INPUT_PULLUP},
+	{"gpmc_ad4.gpmc_ad4",	  OMAP_MUX_MODE0 | AM33XX_PIN_INPUT_PULLUP},
+	{"gpmc_ad5.gpmc_ad5",	  OMAP_MUX_MODE0 | AM33XX_PIN_INPUT_PULLUP},
+	{"gpmc_ad6.gpmc_ad6",	  OMAP_MUX_MODE0 | AM33XX_PIN_INPUT_PULLUP},
+	{"gpmc_ad7.gpmc_ad7",	  OMAP_MUX_MODE0 | AM33XX_PIN_INPUT_PULLUP},
+	{"gpmc_wait0.gpmc_wait0", OMAP_MUX_MODE0 | AM33XX_PIN_INPUT_PULLUP},
+	{"gpmc_wpn.gpmc_wpn",	  OMAP_MUX_MODE7 | AM33XX_PIN_INPUT_PULLUP},
+	{"gpmc_csn0.gpmc_csn0",	  OMAP_MUX_MODE0 | AM33XX_PULL_DISA},
+	{"gpmc_advn_ale.gpmc_advn_ale",  OMAP_MUX_MODE0 | AM33XX_PULL_DISA},
+	{"gpmc_oen_ren.gpmc_oen_ren",	 OMAP_MUX_MODE0 | AM33XX_PULL_DISA},
+	{"gpmc_wen.gpmc_wen",     OMAP_MUX_MODE0 | AM33XX_PULL_DISA},
+	{"gpmc_ben0_cle.gpmc_ben0_cle",	 OMAP_MUX_MODE0 | AM33XX_PULL_DISA},
+	{NULL, 0},
+};
+
+/* NAND partition information */
+static struct mtd_partition ipc335x_nand_partitions[] = {
+/* All the partition sizes are listed in terms of NAND block size */
+	{
+		.name           = "SPL",
+		.offset         = 0,			/* Offset = 0x0 */
+		.size           = SZ_128K,
+	},
+	{
+		.name           = "SPL.backup1",
+		.offset         = MTDPART_OFS_APPEND,	/* Offset = 0x20000 */
+		.size           = SZ_128K,
+	},
+	{
+		.name           = "SPL.backup2",
+		.offset         = MTDPART_OFS_APPEND,	/* Offset = 0x40000 */
+		.size           = SZ_128K,
+	},
+	{
+		.name           = "SPL.backup3",
+		.offset         = MTDPART_OFS_APPEND,	/* Offset = 0x60000 */
+		.size           = SZ_128K,
+	},
+	{
+		.name           = "U-Boot",
+		.offset         = MTDPART_OFS_APPEND,   /* Offset = 0x80000 */
+		.size           = 15 * SZ_128K,
+	},
+	{
+		.name           = "U-Boot Env",
+		.offset         = MTDPART_OFS_APPEND,   /* Offset = 0x260000 */
+		.size           = 1 * SZ_128K,
+	},
+	{
+		.name           = "Kernel",
+		.offset         = MTDPART_OFS_APPEND,   /* Offset = 0x280000 */
+		.size           = 40 * SZ_128K,
+	},
+	{
+		.name           = "File System",
+		.offset         = MTDPART_OFS_APPEND,   /* Offset = 0x780000 */
+		.size           = MTDPART_SIZ_FULL,
+	},
+};
+
+static struct gpmc_timings ipc335x_nand_timings = {
+	.sync_clk = 0,
+
+	.cs_on = 0,
+	.cs_rd_off = 44,
+	.cs_wr_off = 44,
+
+	.adv_on = 6,
+	.adv_rd_off = 34,
+	.adv_wr_off = 44,
+	.we_off = 40,
+	.oe_off = 54,
+
+	.access = 64,
+	.rd_cycle = 82,
+	.wr_cycle = 82,
+
+	.wr_access = 40,
+	.wr_data_mux_bus = 0,
+};
+
+static void nand_init(int board_type, u8 profile)
+{
+	struct omap_nand_platform_data *pdata;
+	struct gpmc_devices_info gpmc_device[2] = {
+		{ NULL, 0 },
+		{ NULL, 0 },
+	};
+
+	setup_pin_mux(nand_pin_mux);
+	pdata = omap_nand_init(ipc335x_nand_partitions,
+		ARRAY_SIZE(ipc335x_nand_partitions), 0, 0,
+		&ipc335x_nand_timings);
+	if (!pdata)
+		return;
+	/*Use softecc by default*/
+	pdata->ecc_opt = OMAP_ECC_HAMMING_CODE_DEFAULT;
+	gpmc_device[0].pdata = pdata;
+	gpmc_device[0].flag = GPMC_DEVICE_NAND;
+
+	omap_init_gpmc(gpmc_device, sizeof(gpmc_device));
+	omap_init_elm();
 }
 
 #define IPC335X_CORE_PHY_ID		0x4dd074
