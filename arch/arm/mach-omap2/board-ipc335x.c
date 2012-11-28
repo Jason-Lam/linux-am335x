@@ -138,7 +138,7 @@ static void _configure_device(int board_type, struct ipc335x_dev_cfg *dev_cfg,
 	}
 }
 
-static struct omap2_hsmmc_info ipc335x_mmc[] __initdata = {
+static struct omap2_hsmmc_info ipc335x_mmc[] = {
 	{
 		.mmc            = 1,
 		.caps           = MMC_CAP_4_BIT_DATA,
@@ -840,22 +840,24 @@ static int ipc335x_core_tx_clk_dly_phy_fixup(struct phy_device *phydev)
 static struct ipc335x_dev_cfg ipc335x_core_dev_cfg[] = {
 	{rgmii1_init, IPC335X_CORE, PROFILE_ALL},
 	{usb0_init, IPC335X_CORE, PROFILE_ALL},
-	{mmc0_init, IPC335X_CORE, PROFILE_0},
+	{mmc0_init, IPC335X_CORE, PROFILE_0 | PROFILE_2},
+	/*nand support will break mmc1 support*/
+	{nand_init, IPC335X_CORE, PROFILE_1 | PROFILE_2},
 	{led_init, IPC335X_CORE, PROFILE_ALL},
 	{NULL, 0, 0},
 };
 
 static struct ipc335x_dev_cfg ipc335x_evm_dev_cfg[] = {
-	{mmc1_init, IPC335X_EVM, PROFILE_ALL},
-	{uart3_init, IPC335X_EVM, PROFILE_0},
-	{uart5_init, IPC335X_EVM, PROFILE_0},
-	{d_can_init, IPC335X_EVM, PROFILE_0},
+	{mmc1_init, IPC335X_EVM, PROFILE_0 | PROFILE_1},
+	{uart3_init, IPC335X_EVM, PROFILE_ALL},
+	{uart5_init, IPC335X_EVM, PROFILE_ALL},
+	{rs485_init, IPC335X_EVM, PROFILE_ALL},
+	{d_can_init, IPC335X_EVM, PROFILE_ALL},
 	{mcasp0_init, IPC335X_EVM, PROFILE_ALL},
-	{lcdc_init, IPC335X_EVM, PROFILE_0},
-	{tsc_init, IPC335X_EVM, PROFILE_0},
-	{enable_ecap2, IPC335X_EVM, PROFILE_0},
-	{gpio_key_init, IPC335X_EVM, PROFILE_0},
-	{rs485_init, IPC335X_EVM, PROFILE_0},
+	{gpio_key_init, IPC335X_EVM, PROFILE_ALL},
+	{lcdc_init, IPC335X_EVM, PROFILE_0 | PROFILE_2},
+	{tsc_init, IPC335X_EVM, PROFILE_0 | PROFILE_2},
+	{enable_ecap2, IPC335X_EVM, PROFILE_0 | PROFILE_2},
 	{NULL, 0, 0},
 };
 
