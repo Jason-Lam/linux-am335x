@@ -142,10 +142,6 @@ static struct omap2_hsmmc_info ipc335x_mmc[] = {
 	{
 		.mmc            = 1,
 		.caps           = MMC_CAP_4_BIT_DATA,
-		.gpio_cd        = -EINVAL,
-		.gpio_wp        = -EINVAL,
-		.nonremovable	= true,
-		.ocr_mask       = MMC_VDD_165_195, /* 1V8 */
 	},
 	{
 		.mmc            = 0,	/* will be set at runtime */
@@ -235,18 +231,17 @@ static struct pinmux_config mmc0_common_pin_mux[] = {
 };
 
 /* Module pin mux for mmc1 */
-static struct pinmux_config mmc1_pin_mux[] = {
-	{"gpmc_ad7.mmc1_dat7",	OMAP_MUX_MODE1 | AM33XX_PIN_INPUT_PULLUP},
-	{"gpmc_ad6.mmc1_dat6",	OMAP_MUX_MODE1 | AM33XX_PIN_INPUT_PULLUP},
-	{"gpmc_ad5.mmc1_dat5",	OMAP_MUX_MODE1 | AM33XX_PIN_INPUT_PULLUP},
-	{"gpmc_ad4.mmc1_dat4",	OMAP_MUX_MODE1 | AM33XX_PIN_INPUT_PULLUP},
+static struct pinmux_config mmc1_common_pin_mux[] = {
 	{"gpmc_ad3.mmc1_dat3",	OMAP_MUX_MODE1 | AM33XX_PIN_INPUT_PULLUP},
 	{"gpmc_ad2.mmc1_dat2",	OMAP_MUX_MODE1 | AM33XX_PIN_INPUT_PULLUP},
 	{"gpmc_ad1.mmc1_dat1",	OMAP_MUX_MODE1 | AM33XX_PIN_INPUT_PULLUP},
 	{"gpmc_ad0.mmc1_dat0",	OMAP_MUX_MODE1 | AM33XX_PIN_INPUT_PULLUP},
 	{"gpmc_csn1.mmc1_clk",	OMAP_MUX_MODE2 | AM33XX_PIN_INPUT_PULLUP},
 	{"gpmc_csn2.mmc1_cmd",	OMAP_MUX_MODE2 | AM33XX_PIN_INPUT_PULLUP},
-	{"gpmc_csn0.gpio1_29",	OMAP_MUX_MODE7 | AM33XX_PIN_INPUT_PULLUP},
+	{NULL, 0},
+};
+
+static struct pinmux_config mmc1_cd_pin_mux[] = {
 	{"usb1_drvvbus.gpio3_13", OMAP_MUX_MODE7 | AM33XX_PIN_INPUT_PULLUP},
 	{NULL, 0},
 };
@@ -290,14 +285,18 @@ static void usb0_init(int board_type, u8 profile)
 
 static void mmc1_init(int board_type, u8 profile)
 {
-	setup_pin_mux(mmc1_pin_mux);
+	setup_pin_mux(mmc1_common_pin_mux);
 
-	ipc335x_mmc[1].mmc = 2;
-	ipc335x_mmc[1].caps = MMC_CAP_4_BIT_DATA;
-	ipc335x_mmc[1].gpio_cd = GPIO_TO_PIN(3, 13);
-	ipc335x_mmc[1].gpio_wp = -EINVAL;
-	ipc335x_mmc[1].ocr_mask = MMC_VDD_32_33 | MMC_VDD_33_34; /* 3V3 */
-
+	switch (board_type){
+	case IPC335X_EVM:
+		setup_pin_mux(mmc1_cd_pin_mux);
+		ipc335x_mmc[1].mmc = 2;
+		ipc335x_mmc[1].caps = MMC_CAP_4_BIT_DATA;
+		ipc335x_mmc[1].gpio_cd = GPIO_TO_PIN(3, 13);
+		ipc335x_mmc[1].gpio_wp = -EINVAL;
+		ipc335x_mmc[1].ocr_mask = MMC_VDD_32_33 | MMC_VDD_33_34;
+		break;
+	}
 	return;
 }
 
@@ -317,6 +316,11 @@ static void mmc0_init(int board_type, u8 profile)
 	switch (board_type){
 	case IPC335X_CORE:
 		setup_pin_mux(mmc0_common_pin_mux);
+		ipc335x_mmc[0].gpio_cd = -EINVAL;
+		ipc335x_mmc[0].gpio_wp = -EINVAL;
+		ipc335x_mmc[0].nonremovable = true;
+		ipc335x_mmc[0].ocr_mask = MMC_VDD_165_195 | MMC_VDD_32_33
+			| MMC_VDD_33_34;
 		break;
 	}
 	omap2_hsmmc_init(ipc335x_mmc);
