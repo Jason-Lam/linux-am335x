@@ -75,7 +75,7 @@
 **  Header		4	0xAA, 0x55, 0x33, 0xEE
 **
 **  Board Name		8	Name for board in ASCII.
-**				Example "A335CORE" = "IPC335x core board"
+**				Example "IPC335X" = "IPC335x core board"
 **
 **  Version		2	Hardware version code for board	in ASCII.
 **				"A1" = rev.A.1
@@ -907,18 +907,12 @@ static void ipc335x_core_setup(struct memory_accessor *mem_acc, void *context)
 		goto out;
 	}
 
-	if (strncmp("A335", config.name, 4)) {
-		pr_err("Board %s\ndoesn't look like an AM335x board\n",
-			config.name);
-		goto out;
-	}
-
 	snprintf(tmp, sizeof(config.name) + 1, "%s", config.name);
 	pr_info("Board name: %s\n", tmp);
 	snprintf(tmp, sizeof(config.version) + 1, "%s", config.version);
 	pr_info("Board version: %s\n", tmp);
 
-	if (!strncmp("A335CORE", config.name, 8)) {
+	if (!strnicmp("IPC335X", config.name, 7)) {
 		setup_ipc335x_core(config.profile);
 	}
 
@@ -964,18 +958,12 @@ static void ipc335x_dock_setup(struct memory_accessor *mem_acc, void *context)
 		goto default_cfg;
 	}
 
-	if (strncmp("A335", config.name, 4)) {
-		pr_err("Board %s\ndoesn't look like an AM335x board\n",
-			config.name);
-		goto default_cfg;
-	}
-
 	snprintf(tmp, sizeof(config.name) + 1, "%s", config.name);
 	pr_info("Board name: %s\n", tmp);
 	snprintf(tmp, sizeof(config.version) + 1, "%s", config.version);
 	pr_info("Board version: %s\n", tmp);
 
-	if (!strncmp("A335XEVM", config.name, 8)) {
+	if (!strnicmp("EVM335X", config.name, 7)) {
 		setup_ipc335x_evm(config.profile);
 	}
 
