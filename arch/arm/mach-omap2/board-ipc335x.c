@@ -121,6 +121,7 @@ static char ipc335x_mac_addr[EEPROM_NO_OF_MAC_ADDR][ETH_ALEN];
 
 #define IPC335X_CORE		0x0
 #define IPC335X_EVM		0x1
+#define SOM335X_CORE		0x2
 
 struct ipc335x_dev_cfg {
 	void (*device_init)(int board_type, u8 profile);
@@ -289,10 +290,13 @@ static void mmc1_init(int board_type, u8 profile)
 
 	switch (board_type){
 	case IPC335X_EVM:
-		setup_pin_mux(mmc1_cd_pin_mux);
+		/* 3,13 gpio used in ddr vtt enable,so disable mmc_cd
+		 * setup_pin_mux(mmc1_cd_pin_mux);
+		 * ipc335x_mmc[1].gpio_cd = GPIO_TO_PIN(3, 13);
+		*/
 		ipc335x_mmc[1].mmc = 2;
 		ipc335x_mmc[1].caps = MMC_CAP_4_BIT_DATA;
-		ipc335x_mmc[1].gpio_cd = GPIO_TO_PIN(3, 13);
+		ipc335x_mmc[1].gpio_cd = -EINVAL;
 		ipc335x_mmc[1].gpio_wp = -EINVAL;
 		ipc335x_mmc[1].ocr_mask = MMC_VDD_32_33 | MMC_VDD_33_34;
 		break;
@@ -825,6 +829,21 @@ static void nand_init(int board_type, u8 profile)
 	omap_init_elm();
 }
 
+static struct pinmux_config gpio_ddr_vtt_pin_mux[] = {
+	{"usb1_drvvbus.gpio3_13", OMAP_MUX_MODE7 | AM33XX_PIN_OUTPUT},
+	{NULL, 0},
+};
+
+static void gpio_ddr_vtt_init(int board_type, u8 profile)
+{
+	int gpio = GPIO_TO_PIN(3, 13);;
+
+	setup_pin_mux(gpio_ddr_vtt_pin_mux);
+	gpio_request(gpio, "ddr_vtt");
+	gpio_direction_output(gpio, 1);
+	return;
+}
+
 #define IPC335X_CORE_PHY_ID		0x4dd074
 #define IPC335X_PHY_MASK		0xfffffffe
 #define AR80XX_PHY_DEBUG_ADDR_REG	0x1d
@@ -862,6 +881,15 @@ static struct ipc335x_dev_cfg ipc335x_evm_dev_cfg[] = {
 	{lcdc_init, IPC335X_EVM, PROFILE_0 | PROFILE_2},
 	{tsc_init, IPC335X_EVM, PROFILE_0 | PROFILE_2},
 	{enable_ecap2, IPC335X_EVM, PROFILE_0 | PROFILE_2},
+	{NULL, 0, 0},
+};
+
+static struct ipc335x_dev_cfg som335x_core_dev_cfg[] = {
+	/*ddr vtt force init*/
+	/*{gpio_ddr_vtt_init, SOM335X_CORE, PROFILE_ALL},*/
+	{mmc0_init, IPC335X_CORE, PROFILE_0 | PROFILE_2},
+	/*nand support will break mmc1 support*/
+	{nand_init, IPC335X_CORE, PROFILE_1 | PROFILE_2},
 	{NULL, 0, 0},
 };
 
@@ -1173,6 +1201,8 @@ static void __init ipc335x_init(void)
 {
 	am33xx_cpuidle_init();
 	am33xx_mux_init(board_mux);
+	/*Force ddr vtt enable*/
+	gpio_ddr_vtt_init(0, 0);
 	omap_serial_init();
 	ipc335x_i2c_init();
 	omap_sdrc_init(NULL, NULL);
