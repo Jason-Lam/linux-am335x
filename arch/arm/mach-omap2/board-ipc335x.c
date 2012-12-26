@@ -1075,7 +1075,11 @@ static struct regulator_init_data am335x_vdd2 = {
 	.consumer_supplies	= am335x_vdd2_supply,
 };
 
+#define PMIC_IRQ_GPIO		GPIO_TO_PIN(1, 8)
 static struct tps65910_board am335x_tps65910_info = {
+	.irq_base	= TWL4030_IRQ_BASE,
+	.gpio_base	= OMAP_MAX_GPIO_LINES,
+	.irq 		= OMAP_GPIO_IRQ(PMIC_IRQ_GPIO),
 	.tps65910_pmic_init_data[TPS65910_REG_VRTC]	= &am335x_dummy,
 	.tps65910_pmic_init_data[TPS65910_REG_VIO]	= &am335x_dummy,
 	.tps65910_pmic_init_data[TPS65910_REG_VDD1]	= &am335x_vdd1,
@@ -1089,6 +1093,12 @@ static struct tps65910_board am335x_tps65910_info = {
 	.tps65910_pmic_init_data[TPS65910_REG_VAUX2]	= &am335x_dummy,
 	.tps65910_pmic_init_data[TPS65910_REG_VAUX33]	= &am335x_dummy,
 	.tps65910_pmic_init_data[TPS65910_REG_VMMC]	= &am335x_dummy,
+};
+
+/* Module pin mux for tps65910 irq */
+static struct pinmux_config pmic_irq_pin_mux[] = {
+	{"uart0_ctsn.gpio1_8", OMAP_MUX_MODE7 | AM33XX_PIN_INPUT},
+	{NULL, 0},
 };
 
 static struct i2c_board_info __initdata ipc335x_i2c_boardinfo[] = {
@@ -1127,6 +1137,7 @@ static void i2c2_init(int evm_id, int profile)
 
 static void __init ipc335x_i2c_init(void)
 {
+	setup_pin_mux(pmic_irq_pin_mux);
 	omap_register_i2c_bus(1, 100, ipc335x_i2c_boardinfo,
 				ARRAY_SIZE(ipc335x_i2c_boardinfo));
 	setup_pin_mux(i2c1_pin_mux);
