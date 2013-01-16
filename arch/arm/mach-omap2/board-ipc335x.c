@@ -24,11 +24,12 @@
 #include <linux/err.h>
 #include <linux/ethtool.h>
 #include <linux/mfd/tps65910.h>
+#include <linux/mfd/ti_tscadc.h>
 #include <linux/reboot.h>
 #include <linux/pwm/pwm.h>
 #include <linux/pwm_backlight.h>
 #include <linux/input.h>
-#include <linux/input/ti_tscadc.h>
+#include <linux/input/ti_tsc.h>
 #include <linux/gpio_keys.h>
 #include <linux/mtd/mtd.h>
 #include <linux/mtd/nand.h>
@@ -508,6 +509,11 @@ static void lcdc_init(int board_type, u8 profile)
 static struct tsc_data ipc335x_touchscreen_data  = {
 	.wires  = 4,
 	.x_plate_resistance = 200,
+	.steps_to_configure = 5,
+};
+
+static struct mfd_tscadc_board ipc335x_tscadc_data = {
+	.tsc_init = &ipc335x_touchscreen_data,
 };
 
 static struct pinmux_config tsc_pin_mux[] = {
@@ -520,13 +526,13 @@ static struct pinmux_config tsc_pin_mux[] = {
 	{NULL, 0},
 };
 
-static void tsc_init(int board_type, u8 profile)
+static void mfd_tscadc_init(int board_type, u8 profile)
 {
 	int err;
 
 	setup_pin_mux(tsc_pin_mux);
 
-	err = am33xx_register_tsc(&ipc335x_touchscreen_data);
+	err = am33xx_register_mfd_tscadc(&ipc335x_tscadc_data);
 	if (err)
 		pr_err("failed to register touchscreen device\n");
 }
@@ -879,7 +885,7 @@ static struct ipc335x_dev_cfg ipc335x_evm_dev_cfg[] = {
 	{mcasp0_init, IPC335X_EVM, PROFILE_ALL},
 	{gpio_key_init, IPC335X_EVM, PROFILE_ALL},
 	{lcdc_init, IPC335X_EVM, PROFILE_0 | PROFILE_2},
-	{tsc_init, IPC335X_EVM, PROFILE_0 | PROFILE_2},
+	{mfd_tscadc_init, IPC335X_EVM, PROFILE_0 | PROFILE_2},
 	{enable_ecap2, IPC335X_EVM, PROFILE_0 | PROFILE_2},
 	{NULL, 0, 0},
 };
