@@ -39,6 +39,7 @@
 #include <video/da8xx-fb.h>
 
 #include <mach/hardware.h>
+#include <mach/board-ipc335x.h>
 
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
@@ -109,20 +110,6 @@ struct ipc335x_eeprom_config {
 #define AM335X_EEPROM_HEADER		0xEE3355AA
 #define EEPROM_NO_OF_MAC_ADDR		3
 static char ipc335x_mac_addr[EEPROM_NO_OF_MAC_ADDR][ETH_ALEN];
-
-#define PROFILE_0		(0x1 << 0)
-#define PROFILE_1		(0x1 << 1)
-#define PROFILE_2		(0x1 << 2)
-#define PROFILE_3		(0x1 << 3)
-#define PROFILE_4		(0x1 << 4)
-#define PROFILE_5		(0x1 << 5)
-#define PROFILE_6		(0x1 << 6)
-#define PROFILE_7		(0x1 << 7)
-#define PROFILE_ALL		0xFF
-
-#define IPC335X_CORE		0x0
-#define IPC335X_EVM		0x1
-#define SOM335X_CORE		0x2
 
 struct ipc335x_dev_cfg {
 	void (*device_init)(int board_type, u8 profile);
