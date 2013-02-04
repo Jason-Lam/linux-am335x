@@ -16,9 +16,10 @@
 #ifndef _BOARD_IPC335X_H
 #define _BOARD_IPC335X_H
 
-#define IPC335X_CORE            0x0
-#define IPC335X_EVM             0x1
-#define SOM335X_CORE            0x2
+#define IPC335X_CORE	0x0
+#define IPC335X_EVM	0x1
+#define SOM335X_CORE	0x2
+#define HMI335X		0x3
 
 /* REVIST : check posibility of PROFILE_(x) syntax usage */
 #define PROFILE_NONE   -1  /* Few board doesn't have profiles */

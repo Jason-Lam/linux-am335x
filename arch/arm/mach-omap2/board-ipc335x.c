@@ -34,6 +34,7 @@
 #include <linux/mtd/mtd.h>
 #include <linux/mtd/nand.h>
 #include <linux/mtd/partitions.h>
+#include <linux/cpu_pm.h>
 
 /* LCD controller is similar to DA850 */
 #include <video/da8xx-fb.h>
@@ -65,6 +66,32 @@
 
 /* Convert GPIO signal to GPIO pin number */
 #define GPIO_TO_PIN(bank, gpio) (32 * (bank) + (gpio))
+
+static int ipc33xx_evmid = -EINVAL;
+
+/*
+** ipc335x_evm_set_id - set up board evmid
+** @evmid - evm id which needs to be configured
+**
+** This function is called to configure board evm id.
+*/
+void ipc335x_evm_set_id(unsigned int evmid)
+{
+	ipc33xx_evmid = evmid;
+	return;
+}
+
+/*
+** ipc335x_evm_get_id - returns Board Type (EVM/IPC/HMI ...)
+**
+** Note:
+**	returns -EINVAL if Board detection hasn't happened yet.
+*/
+int ipc335x_evm_get_id(void)
+{
+	return ipc33xx_evmid;
+}
+EXPORT_SYMBOL(ipc335x_evm_get_id);
 
 /*
 ** Board Config held in On-Board eeprom device.
@@ -201,10 +228,18 @@ static struct pinmux_config i2c1_pin_mux[] = {
 	{NULL, 0},
 };
 
-static struct pinmux_config i2c2_pin_mux[] = {
+static struct pinmux_config i2c2_ipc335x_core_pin_mux[] = {
 	{"uart1_ctsn.i2c2_sda",    OMAP_MUX_MODE3 | AM33XX_SLEWCTRL_SLOW |
 					AM33XX_PULL_UP | AM33XX_INPUT_EN},
 	{"uart1_rtsn.i2c2_scl",   OMAP_MUX_MODE3 | AM33XX_SLEWCTRL_SLOW |
+					AM33XX_PULL_UP | AM33XX_INPUT_EN},
+	{NULL, 0},
+};
+
+static struct pinmux_config i2c2_som335x_core_pin_mux[] = {
+	{"spi0_sclk.i2c2_sda",    OMAP_MUX_MODE2 | AM33XX_SLEWCTRL_SLOW |
+					AM33XX_PULL_UP | AM33XX_INPUT_EN},
+	{"spi0_d0.i2c2_scl",   OMAP_MUX_MODE2 | AM33XX_SLEWCTRL_SLOW |
 					AM33XX_PULL_UP | AM33XX_INPUT_EN},
 	{NULL, 0},
 };
@@ -235,9 +270,21 @@ static struct pinmux_config mmc1_cd_pin_mux[] = {
 	{NULL, 0},
 };
 
-static struct pinmux_config d_can_evm_pin_mux[] = {
+static struct pinmux_config d_can_ipc335x_evm_pin_mux[] = {
 	{"uart1_rxd.d_can1_tx", OMAP_MUX_MODE2 | AM33XX_PULL_ENBL},
 	{"uart1_txd.d_can1_rx", OMAP_MUX_MODE2 | AM33XX_PIN_INPUT_PULLUP},
+	{NULL, 0},
+};
+
+static struct pinmux_config uart1_pin_mux[] = {
+	{"uart1_rxd.uart1_rxd", OMAP_MUX_MODE0 | AM33XX_PIN_INPUT_PULLUP},
+	{"uart1_txd.uart1_txd", OMAP_MUX_MODE0 | AM33XX_PULL_ENBL},
+	{NULL, 0},
+};
+
+static struct pinmux_config d_can_hmi335x_pin_mux[] = {
+	{"uart1_ctsn.d_can0_tx", OMAP_MUX_MODE2 | AM33XX_PULL_ENBL},
+	{"uart1_rtsn.d_can0_rx", OMAP_MUX_MODE2 | AM33XX_PIN_INPUT_PULLUP},
 	{NULL, 0},
 };
 
@@ -260,10 +307,55 @@ static struct pinmux_config usb0_pin_mux[] = {
 	{NULL, 0},
 };
 
+/* pinmux for hmi335x 3v3 ctrl */
+static struct pinmux_config hmi335x_3v3_pin_mux[] = {
+	{"usb0_drvvbus.gpio0_18",    OMAP_MUX_MODE7 | AM33XX_PIN_OUTPUT},
+	{NULL, 0},
+};
+
+static void uart1_init(int board_type, u8 profile)
+{
+	setup_pin_mux(uart1_pin_mux);
+}
+
 static void rgmii1_init(int board_type, u8 profile)
 {
 	setup_pin_mux(rgmii1_pin_mux);
 	return;
+}
+
+static int hmi335x_3v3_enable = -1;
+static void hmi_power_ctrl(int enable)
+{
+    if(gpio_is_valid(hmi335x_3v3_enable)){
+        gpio_set_value(hmi335x_3v3_enable, enable);
+    }
+}
+
+static int hmi335x_power_event(struct notifier_block *self, unsigned long cmd,	void *v)
+{
+	switch (cmd) {
+	case CPU_CLUSTER_PM_ENTER:
+        hmi_power_ctrl(0);
+		break;
+	case CPU_CLUSTER_PM_EXIT:
+        hmi_power_ctrl(1);
+		break;
+	}
+	return NOTIFY_OK;
+}
+
+static struct notifier_block hmi335x_pm_notifier = {
+	.notifier_call = hmi335x_power_event,
+};
+
+static void hmi335x_power_init(int board_type, u8 profile)
+{
+	hmi335x_3v3_enable = GPIO_TO_PIN(0, 18),
+	setup_pin_mux(hmi335x_3v3_pin_mux);
+	gpio_request(hmi335x_3v3_enable, "dock_3v3power_enable");
+	gpio_direction_output(hmi335x_3v3_enable, 1);
+	//cpu_pm_register_notifier(&hmi335x_pm_notifier);
 }
 
 static void usb0_init(int board_type, u8 profile)
@@ -278,6 +370,7 @@ static void mmc1_init(int board_type, u8 profile)
 
 	switch (board_type){
 	case IPC335X_EVM:
+	case HMI335X:
 		/* 3,13 gpio used in ddr vtt enable,so disable mmc_cd
 		 * setup_pin_mux(mmc1_cd_pin_mux);
 		 * ipc335x_mmc[1].gpio_cd = GPIO_TO_PIN(3, 13);
@@ -296,8 +389,12 @@ static void d_can_init(int board_type, u8 profile)
 {
 	switch (board_type){
 	case IPC335X_EVM:
-		setup_pin_mux(d_can_evm_pin_mux);
+		setup_pin_mux(d_can_ipc335x_evm_pin_mux);
 		am33xx_d_can_init(1);
+		break;
+	case HMI335X:
+		setup_pin_mux(d_can_hmi335x_pin_mux);
+		am33xx_d_can_init(0);
 		break;
 	}
 	return;
@@ -307,6 +404,7 @@ static void mmc0_init(int board_type, u8 profile)
 {
 	switch (board_type){
 	case IPC335X_CORE:
+	case SOM335X_CORE:
 		setup_pin_mux(mmc0_common_pin_mux);
 		ipc335x_mmc[0].gpio_cd = -EINVAL;
 		ipc335x_mmc[0].gpio_wp = -EINVAL;
@@ -319,8 +417,36 @@ static void mmc0_init(int board_type, u8 profile)
 	return;
 }
 
+static struct i2c_board_info am335x_i2c_boardinfo2[] = {
+	{
+		I2C_BOARD_INFO("tlv320aic3x", 0x1b),
+	},
+	{
+		I2C_BOARD_INFO("wm8960", 0x1a),
+	},
+	{
+		I2C_BOARD_INFO("ctp-touch", 0x70),
+	},
+};
+
+static void i2c2_init(int board_type, u8 profile)
+{
+	switch (board_type){
+	case IPC335X_CORE:
+		setup_pin_mux(i2c2_ipc335x_core_pin_mux);
+		break;
+	case SOM335X_CORE:
+		setup_pin_mux(i2c2_som335x_core_pin_mux);
+		break;
+	}
+	omap_register_i2c_bus(3, 100, am335x_i2c_boardinfo2,
+		ARRAY_SIZE(am335x_i2c_boardinfo2));
+
+	return;
+}
+
 /* Module pin mux for mcasp0 */
-static struct pinmux_config mcasp0_pin_mux[] = {
+static struct pinmux_config mcasp0_ipc335x_evm_pin_mux[] = {
 	{"mcasp0_aclkx.mcasp0_aclkx", OMAP_MUX_MODE0 | AM33XX_PIN_INPUT_PULLDOWN},
 	{"mcasp0_fsx.mcasp0_fsx", OMAP_MUX_MODE0 | AM33XX_PIN_INPUT_PULLDOWN},
 	{"mcasp0_axr0.mcasp0_axr0", OMAP_MUX_MODE0 | AM33XX_PIN_INPUT_PULLDOWN},
@@ -329,7 +455,23 @@ static struct pinmux_config mcasp0_pin_mux[] = {
 	{NULL, 0},
 };
 
+static struct pinmux_config mcasp1_hmi335x_pin_mux[] = {
+	{"mcasp0_aclkr.mcasp1_aclkx", OMAP_MUX_MODE3 | AM33XX_PIN_INPUT_PULLDOWN},
+	{"mcasp0_fsr.mcasp1_fsx", OMAP_MUX_MODE3 | AM33XX_PIN_INPUT_PULLDOWN},
+	{"mcasp0_axr1.mcasp1_axr0", OMAP_MUX_MODE3 | AM33XX_PIN_INPUT_PULLDOWN},
+	{"mcasp0_ahclkx.mcasp1_axr1", OMAP_MUX_MODE3 |
+						AM33XX_PIN_INPUT_PULLDOWN},
+	{NULL, 0},
+};
+
 static u8 ipc335x_evm_iis_serializer_direction[] = {
+	TX_MODE,	RX_MODE,	INACTIVE_MODE,  INACTIVE_MODE,
+	INACTIVE_MODE,	INACTIVE_MODE,	INACTIVE_MODE,	INACTIVE_MODE,
+	INACTIVE_MODE,	INACTIVE_MODE,	INACTIVE_MODE,	INACTIVE_MODE,
+	INACTIVE_MODE,	INACTIVE_MODE,	INACTIVE_MODE,	INACTIVE_MODE,
+};
+
+static u8 hmi335x_iis_serializer_direction[] = {
 	TX_MODE,	RX_MODE,	INACTIVE_MODE,  INACTIVE_MODE,
 	INACTIVE_MODE,	INACTIVE_MODE,	INACTIVE_MODE,	INACTIVE_MODE,
 	INACTIVE_MODE,	INACTIVE_MODE,	INACTIVE_MODE,	INACTIVE_MODE,
@@ -349,12 +491,34 @@ static struct snd_platform_data ipc335x_evm_snd_data = {
 	.rxnumevt	= 1,
 };
 
-/* Setup McASP 0 */
-static void mcasp0_init(int board_type, u8 profile)
+static struct snd_platform_data hmi335x_snd_data = {
+	.tx_dma_offset	= 0x46400000,	/* McASP1 */
+	.rx_dma_offset	= 0x46400000,
+	.op_mode	= DAVINCI_MCASP_IIS_MODE,
+	.num_serializer	= ARRAY_SIZE(hmi335x_iis_serializer_direction),
+	.tdm_slots	= 2,
+	.serial_dir	= hmi335x_iis_serializer_direction,
+	.asp_chan_q	= EVENTQ_2,
+	.version	= MCASP_VERSION_3,
+	.txnumevt	= 1,
+	.rxnumevt	= 1,
+};
+
+/* Setup McASP */
+static void mcasp_init(int board_type, u8 profile)
 {
-	/* Configure McASP */
-	setup_pin_mux(mcasp0_pin_mux);
-	am335x_register_mcasp(&ipc335x_evm_snd_data, 0);
+	switch (board_type){
+	    case IPC335X_EVM:
+	        /* Configure McASP */
+	        setup_pin_mux(mcasp0_ipc335x_evm_pin_mux);
+	        am335x_register_mcasp(&ipc335x_evm_snd_data, 0);
+	        break;
+	    case HMI335X:
+	        /* Configure McASP */
+	        setup_pin_mux(mcasp1_hmi335x_pin_mux);
+	        am335x_register_mcasp(&hmi335x_snd_data, 1);
+	        break;
+	}
 	return;
 }
 
@@ -455,6 +619,13 @@ struct da8xx_lcdc_platform_data ilx_at070tn83_v1_pdata = {
 	.panel_power_ctrl	= lcd_power_ctrl,
 };
 
+struct da8xx_lcdc_platform_data tm070rdh12_v2_pdata = {
+	.manu_name		= "Tianma",
+	.controller_data	= &lcd_cfg,
+	.type			= "tm070rdh12_v2",
+	.panel_power_ctrl	= lcd_power_ctrl,
+};
+
 static int __init conf_disp_pll(int rate)
 {
 	struct clk *disp_pll;
@@ -487,8 +658,17 @@ static void lcdc_init(int board_type, u8 profile)
 		return;
 	}
 
-	if (am33xx_register_lcdc(&ilx_at070tn83_v1_pdata))
-		pr_info("Failed to register LCDC device\n");
+	switch (board_type){
+	case IPC335X_EVM:
+		if (am33xx_register_lcdc(&ilx_at070tn83_v1_pdata))
+			pr_info("Failed to register at070tn83 device\n");
+		break;
+
+	case HMI335X:
+		if (am33xx_register_lcdc(&tm070rdh12_v2_pdata))
+			pr_info("Failed to register tm070rdh12 device\n");
+		break;
+	}
 	return;
 }
 
@@ -588,8 +768,8 @@ static int __init ecap2_init(void)
 late_initcall(ecap2_init);
 
 static struct pinmux_config uart3_pin_mux[] = {
-	{"spi0_cs1.uart3_rxd", AM33XX_PIN_INPUT_PULLUP},
-	{"ecap0_in_pwm0_out.uart3_txd", AM33XX_PULL_ENBL},
+	{"spi0_cs1.uart3_rxd", OMAP_MUX_MODE1 | AM33XX_PIN_INPUT_PULLUP},
+	{"ecap0_in_pwm0_out.uart3_txd", OMAP_MUX_MODE1 | AM33XX_PULL_ENBL},
 	{NULL, 0},
 };
 
@@ -600,9 +780,22 @@ static void uart3_init(int board_type, u8 profile)
 	return;
 }
 
+static struct pinmux_config uart4_pin_mux[] = {
+	{"gpmc_wait0.uart4_rxd", OMAP_MUX_MODE6 | AM33XX_PIN_INPUT_PULLUP},
+	{"gpmc_wpn.uart4_txd", OMAP_MUX_MODE6 | AM33XX_PULL_ENBL},
+	{NULL, 0},
+};
+
+/* setup uart4 */
+static void uart4_init(int board_type, u8 profile)
+{
+	setup_pin_mux(uart4_pin_mux);
+	return;
+}
+
 static struct pinmux_config uart5_pin_mux[] = {
-	{"mii1_col.uart5_rxd", AM33XX_PIN_INPUT_PULLUP},
-	{"rmii1_refclk.uart5_txd", AM33XX_PULL_ENBL},
+	{"mii1_col.uart5_rxd", OMAP_MUX_MODE3 | AM33XX_PIN_INPUT_PULLUP},
+	{"rmii1_refclk.uart5_txd", OMAP_MUX_MODE3 | AM33XX_PULL_ENBL},
 	{NULL, 0},
 };
 
@@ -613,12 +806,12 @@ static void uart5_init(int board_type, u8 profile)
 	return;
 }
 
-static struct pinmux_config led_pin_mux[] = {
+static struct pinmux_config ipc335x_led_pin_mux[] = {
 	{"mcasp0_ahclkx.gpio3_21", OMAP_MUX_MODE7 | AM33XX_PIN_OUTPUT_PULLUP},
 	{NULL, 0},
 };
 
-static struct gpio_led gpio_leds[] = {
+static struct gpio_led ipc335x_gpio_leds[] = {
 	{
 		.name			= "usr0",
 		.default_trigger	= "heartbeat",
@@ -627,27 +820,83 @@ static struct gpio_led gpio_leds[] = {
 	},
 };
 
-static struct gpio_led_platform_data gpio_led_info = {
-	.leds		= gpio_leds,
-	.num_leds	= ARRAY_SIZE(gpio_leds),
+static struct gpio_led_platform_data ipc335x_gpio_led_info = {
+	.leds		= ipc335x_gpio_leds,
+	.num_leds	= ARRAY_SIZE(ipc335x_gpio_leds),
 };
 
-static struct platform_device leds_gpio = {
+static struct platform_device ipc335x_core_leds_gpio = {
 	.name	= "leds-gpio",
 	.id	= -1,
 	.dev	= {
-		.platform_data	= &gpio_led_info,
+		.platform_data	= &ipc335x_gpio_led_info,
+	},
+};
+
+static struct pinmux_config hmi335x_led_pin_mux[] = {
+	{"gpmc_a6.gpio1_22", OMAP_MUX_MODE7 | AM33XX_PIN_OUTPUT_PULLUP},
+	{"gpmc_a7.gpio1_23", OMAP_MUX_MODE7 | AM33XX_PIN_OUTPUT_PULLUP},
+	{"gpmc_a8.gpio1_24", OMAP_MUX_MODE7 | AM33XX_PIN_OUTPUT_PULLUP},
+	{"gpmc_a9.gpio1_25", OMAP_MUX_MODE7 | AM33XX_PIN_OUTPUT_PULLUP},
+	{NULL, 0},
+};
+
+static struct gpio_led hmi335x_gpio_leds[] = {
+	{
+		.name			= "mmc0",
+		.default_trigger	= "heartbeat",
+		.gpio			= GPIO_TO_PIN(1, 22),
+		.active_low		= 1,
+	},
+	{
+		.name			= "mmc1",
+		.default_trigger	= "heartbeat",
+		.gpio			= GPIO_TO_PIN(1, 23),
+		.active_low		= 1,
+	},
+	{
+		.name			= "usr2",
+		.default_trigger	= "heartbeat",
+		.gpio			= GPIO_TO_PIN(1, 24),
+		.active_low		= 1,
+	},
+	{
+		.name			= "usr3",
+		.default_trigger	= "heartbeat",
+		.gpio			= GPIO_TO_PIN(1, 25),
+		.active_low		= 1,
+	},
+};
+
+static struct gpio_led_platform_data hmi335x_gpio_led_info = {
+	.leds		= hmi335x_gpio_leds,
+	.num_leds	= ARRAY_SIZE(hmi335x_gpio_leds),
+};
+
+static struct platform_device hmi335x_leds_gpio = {
+	.name	= "leds-gpio",
+	.id	= -1,
+	.dev	= {
+		.platform_data	= &hmi335x_gpio_led_info,
 	},
 };
 
 static void led_init(int board_type, u8 profile)
 {
-	setup_pin_mux(led_pin_mux);
-	platform_device_register(&leds_gpio);
+	switch (board_type){
+	case IPC335X_CORE:
+		setup_pin_mux(ipc335x_led_pin_mux);
+		platform_device_register(&ipc335x_core_leds_gpio);
+		break;
+	case HMI335X:
+		setup_pin_mux(hmi335x_led_pin_mux);
+		platform_device_register(&hmi335x_leds_gpio);
+		break;
+	}
 	return;
 }
 
-static struct pinmux_config gpio_keys_pin_mux[] = {
+static struct pinmux_config ipc335x_gpio_keys_pin_mux[] = {
 	{"mcasp0_aclkr.gpio3_18", OMAP_MUX_MODE7 | AM33XX_PIN_INPUT_PULLUP},
 	{"mcasp0_fsr.gpio3_19", OMAP_MUX_MODE7 | AM33XX_PIN_INPUT_PULLUP},
 	{NULL, 0},
@@ -682,21 +931,75 @@ static struct platform_device ipc335x_evm_gpio_keys = {
 	},
 };
 
+static struct pinmux_config hmi335x_gpio_keys_pin_mux[] = {
+	{"gpmc_a1.gpio1_17", OMAP_MUX_MODE7 | AM33XX_PIN_INPUT_PULLUP},
+	{"gpmc_a2.gpio1_18", OMAP_MUX_MODE7 | AM33XX_PIN_INPUT_PULLUP},
+	{NULL, 0},
+};
+
+/* Configure GPIOs for GPIO Keys */
+static struct gpio_keys_button hmi335x_gpio_buttons[] = {
+	{
+		.code                   = KEY_HOME,
+		.gpio                   = GPIO_TO_PIN(1, 17),
+		.desc                   = "USER KEY1",
+		.active_low		= 1,
+	},
+	{
+		.code                   = KEY_ESC,
+		.gpio                   = GPIO_TO_PIN(1, 18),
+		.desc                   = "USER KEY2",
+		.active_low		= 1,
+	},
+};
+
+static struct gpio_keys_platform_data hmi335x_gpio_key_info = {
+	.buttons        = hmi335x_gpio_buttons,
+	.nbuttons       = ARRAY_SIZE(hmi335x_gpio_buttons),
+};
+
+static struct platform_device hmi335x_gpio_keys = {
+	.name   = "gpio-keys",
+	.id     = -1,
+	.dev    = {
+		.platform_data  = &hmi335x_gpio_key_info,
+	},
+};
+
 static void gpio_key_init(int board_type, u8 profile)
 {
-	int err;
+	int err = 0;
 
-	setup_pin_mux(gpio_keys_pin_mux);
-	err = platform_device_register(&ipc335x_evm_gpio_keys);
+	switch (board_type){
+	case IPC335X_EVM:
+		setup_pin_mux(ipc335x_gpio_keys_pin_mux);
+		err = platform_device_register(&ipc335x_evm_gpio_keys);
+		break;
+	case HMI335X:
+		setup_pin_mux(hmi335x_gpio_keys_pin_mux);
+		err = platform_device_register(&hmi335x_gpio_keys);
+		break;
+	}
 	if (err)
 		pr_err("failed to register gpio key device\n");
 }
 
 /* Module pin mux for RS485 */
-static struct pinmux_config rs485_pin_mux[] = {
+static struct pinmux_config ipc335x_evm_rs485_pin_mux[] = {
 	{"spi0_sclk.uart2_rxd", OMAP_MUX_MODE1 | AM33XX_SLEWCTRL_SLOW |
 						AM33XX_PIN_INPUT_PULLUP},
 	{"spi0_d0.uart2_txd", OMAP_MUX_MODE1 | AM33XX_PULL_UP |
+						AM33XX_PULL_DISA |
+						AM33XX_SLEWCTRL_SLOW},
+	/* flow ctrl gpio */
+	{"xdma_event_intr0.gpio0_19", OMAP_MUX_MODE7 | AM33XX_PIN_OUTPUT},
+	{NULL, 0},
+};
+
+static struct pinmux_config hmi335x_rs485_pin_mux[] = {
+	{"mii1_crs.uart2_rxd", OMAP_MUX_MODE6 | AM33XX_SLEWCTRL_SLOW |
+						AM33XX_PIN_INPUT_PULLUP},
+	{"mii1_rxerr.uart2_txd", OMAP_MUX_MODE6 | AM33XX_PULL_UP |
 						AM33XX_PULL_DISA |
 						AM33XX_SLEWCTRL_SLOW},
 	/* flow ctrl gpio */
@@ -708,7 +1011,14 @@ static struct pinmux_config rs485_pin_mux[] = {
 static void rs485_init(int board_type, u8 profile)
 {
 	int flow_ctrl_gpio = GPIO_TO_PIN(0, 19);
-	setup_pin_mux(rs485_pin_mux);
+	switch (board_type){
+	case IPC335X_EVM:
+		setup_pin_mux(ipc335x_evm_rs485_pin_mux);
+		break;
+	case HMI335X:
+		setup_pin_mux(hmi335x_rs485_pin_mux);
+		break;
+	}
 	uart_omap_port_set_rts_gpio(2, flow_ctrl_gpio);
 	return;
 }
@@ -857,6 +1167,7 @@ static struct ipc335x_dev_cfg ipc335x_core_dev_cfg[] = {
 	{rgmii1_init, IPC335X_CORE, PROFILE_ALL},
 	{usb0_init, IPC335X_CORE, PROFILE_ALL},
 	{mmc0_init, IPC335X_CORE, PROFILE_0 | PROFILE_2},
+	{i2c2_init, IPC335X_CORE, PROFILE_ALL},
 	/*nand support will break mmc1 support*/
 	{nand_init, IPC335X_CORE, PROFILE_1 | PROFILE_2},
 	{led_init, IPC335X_CORE, PROFILE_ALL},
@@ -869,7 +1180,7 @@ static struct ipc335x_dev_cfg ipc335x_evm_dev_cfg[] = {
 	{uart5_init, IPC335X_EVM, PROFILE_ALL},
 	{rs485_init, IPC335X_EVM, PROFILE_ALL},
 	{d_can_init, IPC335X_EVM, PROFILE_ALL},
-	{mcasp0_init, IPC335X_EVM, PROFILE_ALL},
+	{mcasp_init, IPC335X_EVM, PROFILE_ALL},
 	{gpio_key_init, IPC335X_EVM, PROFILE_ALL},
 	{lcdc_init, IPC335X_EVM, PROFILE_0 | PROFILE_2},
 	{mfd_tscadc_init, IPC335X_EVM, PROFILE_0 | PROFILE_2},
@@ -880,31 +1191,69 @@ static struct ipc335x_dev_cfg ipc335x_evm_dev_cfg[] = {
 static struct ipc335x_dev_cfg som335x_core_dev_cfg[] = {
 	/*ddr vtt force init*/
 	/*{gpio_ddr_vtt_init, SOM335X_CORE, PROFILE_ALL},*/
-	{mmc0_init, IPC335X_CORE, PROFILE_0 | PROFILE_2},
-	/*nand support will break mmc1 support*/
-	{nand_init, IPC335X_CORE, PROFILE_1 | PROFILE_2},
+	{i2c2_init, SOM335X_CORE, PROFILE_ALL},
+	{mmc0_init, SOM335X_CORE, PROFILE_0 | PROFILE_2},
+	/*nand support will break mmc1 uart4 support*/
+	{nand_init, SOM335X_CORE, PROFILE_1 | PROFILE_2},
 	{NULL, 0, 0},
 };
 
-static void setup_ipc335x_core(u8 profile_shift)
+static struct ipc335x_dev_cfg hmi335x_dev_cfg[] = {
+	{hmi335x_power_init, HMI335X, PROFILE_ALL},
+	{mmc1_init, HMI335X, PROFILE_0 | PROFILE_1},
+	{uart1_init, HMI335X, PROFILE_ALL},
+	{uart4_init, HMI335X, PROFILE_0 | PROFILE_1},
+	/*led support will break ctpts support*/
+	{led_init, HMI335X, PROFILE_0 | PROFILE_2},
+	{rgmii1_init, HMI335X, PROFILE_ALL},
+	{rs485_init, HMI335X, PROFILE_ALL},
+	{d_can_init, HMI335X, PROFILE_ALL},
+	{mcasp_init, HMI335X, PROFILE_ALL},
+	{gpio_key_init, HMI335X, PROFILE_ALL},
+	{lcdc_init, HMI335X, PROFILE_0 | PROFILE_2},
+	{mfd_tscadc_init, HMI335X, PROFILE_0 | PROFILE_2},
+	{enable_ecap2, HMI335X, PROFILE_0 | PROFILE_2},
+	{NULL, 0, 0},
+};
+
+static void setup_ipc335x_core(int board_type, u8 profile_shift)
 {
-	pr_info("The board is IPC335X CORE in profile %d\n", profile_shift);
-
-	_configure_device(IPC335X_CORE, ipc335x_core_dev_cfg,
-		1 << profile_shift);
-
+	switch(board_type){
+	case IPC335X_CORE:
+		pr_info("The board is IPC335X CORE in profile %d\n",
+			profile_shift);
+		_configure_device(IPC335X_CORE, ipc335x_core_dev_cfg,
+			1 << profile_shift);
+		break;
+	case SOM335X_CORE:
+		pr_info("The board is SOM335X CORE in profile %d\n",
+			profile_shift);
+		_configure_device(SOM335X_CORE, som335x_core_dev_cfg,
+			1 << profile_shift);
+		break;
+	}
 	/* Atheros Tx Clk delay Phy fixup */
 	phy_register_fixup_for_uid(IPC335X_CORE_PHY_ID, IPC335X_PHY_MASK,
 		ipc335x_core_tx_clk_dly_phy_fixup);
 	am33xx_cpsw_init(AM33XX_CPSW_MODE_RGMII, NULL, NULL);
 }
 
-static void setup_ipc335x_evm(u8 profile_shift)
+static void setup_ipc335x_dock(int board_type, u8 profile_shift)
 {
-	pr_info("The board is IPC335X EVM in profile %d\n", profile_shift);
-
-	_configure_device(IPC335X_EVM, ipc335x_evm_dev_cfg, 
-		1 << profile_shift);
+	switch(board_type){
+	case IPC335X_EVM:
+		pr_info("The board is IPC335X EVM in profile %d\n",
+			profile_shift);
+		_configure_device(IPC335X_EVM, ipc335x_evm_dev_cfg,
+			1 << profile_shift);
+		break;
+	case HMI335X:
+		pr_info("The board is HMI335X in profile %d\n",
+			profile_shift);
+		_configure_device(HMI335X, hmi335x_dev_cfg,
+			1 << profile_shift);
+		break;
+	}
 }
 
 static void ipc335x_core_setup(struct memory_accessor *mem_acc, void *context)
@@ -934,9 +1283,13 @@ static void ipc335x_core_setup(struct memory_accessor *mem_acc, void *context)
 	pr_info("Board version: %s\n", tmp);
 
 	if (!strnicmp("IPC335X", config.name, 7)) {
-		setup_ipc335x_core(config.profile);
+		setup_ipc335x_core(IPC335X_CORE, config.profile);
+		return;
 	}
 
+	if (!strnicmp("SOM335X", config.name, 7)) {
+		setup_ipc335x_core(SOM335X_CORE, config.profile);
+	}
 	return;
 
 out:
@@ -950,9 +1303,9 @@ out:
 		   "contents, if any, refer to the %s function in the\n"
 		   "%s file to modify the board\n"
 		   "initialization code to match the hardware configuration\n"
-		   "assume IPC335x core on Profile0",
+		   "assume SOM335X core on Profile0",
 		   __func__ , __FILE__);
-	setup_ipc335x_core(0);
+	setup_ipc335x_core(SOM335X_CORE, 0);
 }
 
 static void ipc335x_dock_setup(struct memory_accessor *mem_acc, void *context)
@@ -985,11 +1338,14 @@ static void ipc335x_dock_setup(struct memory_accessor *mem_acc, void *context)
 	pr_info("Board version: %s\n", tmp);
 
 	if (!strnicmp("EVM335X", config.name, 7)) {
-		setup_ipc335x_evm(config.profile);
+		setup_ipc335x_dock(IPC335X_EVM, config.profile);
+		return;
 	}
 
+	if (!strnicmp("HMI335X", config.name, 7)) {
+		setup_ipc335x_dock(HMI335X, config.profile);
+	}
 	return;
-
 default_cfg:
 	/*
 	 * If the EEPROM hasn't been programed or an incorrect header
@@ -1001,9 +1357,9 @@ default_cfg:
 		   "contents, if any, refer to the %s function in the\n"
 		   "%s file to modify the board\n"
 		   "initialization code to match the hardware configuration\n"
-		   "assume IPC335x evm on Profile0",
+		   "assume HMI335X on Profile0",
 		   __func__ , __FILE__);
-	setup_ipc335x_evm(0);
+	setup_ipc335x_dock(HMI335X, 0);
 	return;
 out:
 	/*
@@ -1090,7 +1446,7 @@ static struct tps65910_board am335x_tps65910_info = {
 
 /* Module pin mux for tps65910 irq */
 static struct pinmux_config pmic_irq_pin_mux[] = {
-	{"uart0_ctsn.gpio1_8", OMAP_MUX_MODE7 | AM33XX_PIN_INPUT},
+	{"uart0_ctsn.gpio1_8", OMAP_MUX_MODE7 | AM33XX_PIN_INPUT_PULLUP},
 	{NULL, 0},
 };
 
@@ -1114,20 +1470,6 @@ static struct i2c_board_info am335x_i2c_boardinfo1[] = {
 	},
 };
 
-static struct i2c_board_info am335x_i2c_boardinfo2[] = {
-	{
-		I2C_BOARD_INFO("tlv320aic3x", 0x1b),
-	},
-};
-
-static void i2c2_init(int evm_id, int profile)
-{
-	setup_pin_mux(i2c2_pin_mux);
-	omap_register_i2c_bus(3, 100, am335x_i2c_boardinfo2,
-			ARRAY_SIZE(am335x_i2c_boardinfo2));
-	return;
-}
-
 static void __init ipc335x_i2c_init(void)
 {
 	setup_pin_mux(pmic_irq_pin_mux);
@@ -1136,7 +1478,6 @@ static void __init ipc335x_i2c_init(void)
 	setup_pin_mux(i2c1_pin_mux);
 	omap_register_i2c_bus(2, 100, am335x_i2c_boardinfo1,
 			ARRAY_SIZE(am335x_i2c_boardinfo1));
-	i2c2_init(0, 0);
 }
 
 void __iomem *am33xx_emif_base;
