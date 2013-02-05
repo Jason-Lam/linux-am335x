@@ -304,6 +304,20 @@ static struct da8xx_panel known_lcd_panels[] = {
 		.pxl_clk = 30000000,
 		.invert_pxl_clk = 0,
 	},
+	/* TM070RDH12_V2 */
+	[5] = {
+		.name = "tm070rdh12_v2",
+		.width = 800,
+		.height = 480,
+		.hfp = 40,
+		.hbp = 40,
+		.hsw = 48,
+		.vfp = 12,
+		.vbp = 25,
+		.vsw = 3,
+		.pxl_clk = 30000000,
+		.invert_pxl_clk = 0,
+	},
 };
 
 static inline bool is_raster_enabled(void)
