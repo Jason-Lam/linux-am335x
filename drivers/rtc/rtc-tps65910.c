@@ -299,18 +299,17 @@ static int __devexit tps65910_rtc_remove(struct platform_device *pdev)
 	return 0;
 }
 
-#if 0
-#ifdef CONFIG_PM_SLEEP
 static int tps65910_rtc_suspend(struct platform_device *pdev,
 		pm_message_t state)
 {
 	struct tps65910 *tps = dev_get_drvdata(pdev->dev.parent);
+	struct tps65910_rtc *tps_rtc = platform_get_drvdata(pdev);
 	u8 alarm = TPS65910_RTC_INTERRUPTS_IT_ALARM;
 	int ret;
 
 	/* Store current list of enabled interrupts*/
 	ret = regmap_read(tps->regmap, TPS65910_RTC_INTERRUPTS,
-		&tps->rtc->irqstat);
+		&tps_rtc->irqstat);
 	if (ret < 0)
 		return ret;
 
@@ -321,22 +320,12 @@ static int tps65910_rtc_suspend(struct platform_device *pdev,
 static int tps65910_rtc_resume(struct platform_device *pdev)
 {
 	struct tps65910 *tps = dev_get_drvdata(pdev->dev.parent);
+	struct tps65910_rtc *tps_rtc = platform_get_drvdata(pdev);
 
 	/* Restore list of enabled interrupts before suspend */
 	return regmap_write(tps->regmap, TPS65910_RTC_INTERRUPTS,
-		tps->rtc->irqstat);
+		tps_rtc->irqstat);
 }
-
-static const struct dev_pm_ops tps65910_rtc_pm_ops = {
-	.suspend	= tps65910_rtc_suspend,
-	.resume		= tps65910_rtc_resume,
-};
-
-#define DEV_PM_OPS     (&tps65910_rtc_pm_ops)
-#else
-#define DEV_PM_OPS     NULL
-#endif
-#endif
 
 static struct platform_driver tps65910rtc_driver = {
 	.probe		= tps65910_rtc_probe,
@@ -344,8 +333,9 @@ static struct platform_driver tps65910rtc_driver = {
 	.driver		= {
 		.owner	= THIS_MODULE,
 		.name	= "tps65910-rtc",
-		/*.pm	= DEV_PM_OPS,*/
 	},
+	.suspend	= tps65910_rtc_suspend,
+	.resume		= tps65910_rtc_resume,
 };
 
 module_platform_driver(tps65910rtc_driver);
