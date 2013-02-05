@@ -18,6 +18,7 @@
 #include <sound/core.h>
 #include <sound/pcm.h>
 #include <sound/soc.h>
+#include <sound/pcm_params.h>
 
 #include <asm/dma.h>
 #include <asm/mach-types.h>
@@ -27,10 +28,20 @@
 #ifdef CONFIG_MACH_AM335XEVM
 #include <mach/board-am335xevm.h>
 #endif
+#ifdef CONFIG_MACH_IPC335X
+#include <mach/board-ipc335x.h>
+#include "../codecs/wm8960.h"
+#endif
 
 #include "davinci-pcm.h"
 #include "davinci-i2s.h"
 #include "davinci-mcasp.h"
+
+#ifdef  DEBUG
+#define dprintk( argc, argv... )        printk( argc, ##argv )
+#else
+#define dprintk( argc, argv... )        
+#endif
 
 #define AUDIO_FORMAT (SND_SOC_DAIFMT_DSP_B | \
 		SND_SOC_DAIFMT_CBM_CFM | SND_SOC_DAIFMT_IB_NF)
@@ -84,8 +95,117 @@ static int evm_hw_params(struct snd_pcm_substream *substream,
 	if (ret < 0)
 		return ret;
 
+#ifdef CONFIG_MACH_IPC335X
+	if (ipc335x_dock_get_id() == HMI335X){
+		ret = snd_soc_dai_set_pll(codec_dai, 0, 0, sysclk, 11289600);
+		if (ret < 0)
+			return ret;
+	}
+#endif
+
 	return 0;
 }
+
+#ifdef CONFIG_MACH_IPC335X
+static int hmi335x_wm8960_hw_params(struct snd_pcm_substream *substream,
+		struct snd_pcm_hw_params *params)
+{
+	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct snd_soc_dai *codec_dai = rtd->codec_dai;
+	struct snd_soc_dai *cpu_dai = rtd->cpu_dai;
+	unsigned int rate = params_rate(params);
+	snd_pcm_format_t fmt = params_format( params );
+	unsigned sysclk;
+	int ret = 0;
+
+	int bclk_div;
+	int dacdiv;
+
+	dprintk("+%s()\n", __FUNCTION__ );
+
+	switch ( fmt ) {
+	case SNDRV_PCM_FORMAT_S16:
+		bclk_div = 32;
+		break;
+	case SNDRV_PCM_FORMAT_S20_3LE:
+	case SNDRV_PCM_FORMAT_S24:
+		bclk_div = 48;
+		break;
+	default:
+		dprintk("-%s(): PCM FMT ERROR\n", __FUNCTION__ );
+		return -EINVAL;
+	}
+	
+	switch ( rate ) {
+	case 8018:
+		dacdiv = WM8960_DAC_DIV_5_5;
+		sysclk = 11289600;
+		break;
+	case 11025:
+		dacdiv = WM8960_DAC_DIV_4;
+		sysclk = 11289600;
+		break;
+	case 22050: 
+		dacdiv = WM8960_DAC_DIV_2;
+		sysclk = 11289600;
+		break;
+	case 44100:
+		dacdiv = WM8960_DAC_DIV_1;
+		sysclk = 11289600;
+		break;	
+	case 8000:
+		dacdiv = WM8960_DAC_DIV_6;
+		sysclk = 12288000;
+		break;
+	case 12000: 
+		dacdiv = WM8960_DAC_DIV_4;
+		sysclk = 12288000;
+		break;
+	case 16000: 
+		dacdiv = WM8960_DAC_DIV_3;
+		sysclk = 12288000;
+		break;
+	case 24000:
+		dacdiv = WM8960_DAC_DIV_2;
+		sysclk = 12288000;
+		break;
+	case 32000:
+		dacdiv = WM8960_DAC_DIV_1_5;
+		sysclk = 12288000;
+		break;
+	case 48000:
+		dacdiv = WM8960_DAC_DIV_1;
+		sysclk = 12288000;
+		break;
+	default:
+		dprintk("-%s(): SND RATE ERROR (%d)\n", __FUNCTION__,rate );
+		return -EINVAL;
+	}
+	dprintk("-%s(): rate is %d\n", __FUNCTION__,rate );
+	ret = snd_soc_dai_set_clkdiv( codec_dai,  WM8960_DACDIV, dacdiv );
+	if( ret < 0 ){
+		dprintk( "-%s(): Codec SYSCLKDIV setting error, %d\n", __FUNCTION__, ret );
+		return ret;
+	}
+	ret = snd_soc_dai_set_fmt(codec_dai, AUDIO_FORMAT);
+	if( ret < 0 ){
+		dprintk( "-%s(): Codec DAI configuration error, %d\n", __FUNCTION__, ret );
+		return ret;
+	}
+	ret = snd_soc_dai_set_fmt(cpu_dai, AUDIO_FORMAT);
+	if( ret < 0 ){
+	    dprintk( "-%s(): AP DAI configuration error, %d\n", __FUNCTION__, ret );
+	    return ret;
+	}
+	ret = snd_soc_dai_set_pll(codec_dai, 0, 0, 12000000, sysclk);
+	dprintk("-%s()\n", __FUNCTION__ );
+	return 0;
+}
+
+static struct snd_soc_ops hmi335x_wm8960_ops = {
+	.hw_params = hmi335x_wm8960_hw_params,
+};
+#endif
 
 static int evm_spdif_hw_params(struct snd_pcm_substream *substream,
 				struct snd_pcm_hw_params *params)
@@ -161,6 +281,65 @@ static int evm_aic3x_init(struct snd_soc_pcm_runtime *rtd)
 
 	return 0;
 }
+
+#ifdef CONFIG_MACH_IPC335X
+static const struct snd_soc_dapm_widget hmi335x_dapm_capture_widgets[] = {
+	SND_SOC_DAPM_MIC(   "Mic Jack",         NULL ),
+	SND_SOC_DAPM_LINE(  "Line Input 3 (FM)",NULL ),
+};
+
+static const struct snd_soc_dapm_widget hmi335x_dapm_playback_widgets[] = {
+	SND_SOC_DAPM_HP(    "Headphone Jack",   NULL ),
+	SND_SOC_DAPM_SPK(   "Speaker_L",        NULL ),
+	SND_SOC_DAPM_SPK(   "Speaker_R",        NULL ),
+};
+
+static const struct snd_soc_dapm_route hmi335x_audio_map[] = {
+	{ "Headphone Jack", NULL,   "HP_L"      },
+	{ "Headphone Jack", NULL,   "HP_R"      },
+	{ "Speaker_L",      NULL,   "SPK_LP"    }, 
+	{ "Speaker_L",      NULL,   "SPK_LN"    }, 
+	{ "Speaker_R",      NULL,   "SPK_RP"    }, 
+	{ "Speaker_R",      NULL,   "SPK_RN"    }, 
+	{ "LINPUT1",        NULL,   "MICB"      },
+	{ "MICB",           NULL,   "Mic Jack"  },
+};
+
+static int hmi335x_wm8960_init(struct snd_soc_pcm_runtime *rtd)
+{
+	struct snd_soc_codec *codec = rtd->codec;
+	struct snd_soc_dapm_context *dapm = &codec->dapm;
+
+	dprintk("+%s()\n", __FUNCTION__ );
+
+	snd_soc_dapm_nc_pin(dapm, "RINPUT1");
+	snd_soc_dapm_nc_pin(dapm, "LINPUT2");
+	snd_soc_dapm_nc_pin(dapm, "RINPUT2");
+	snd_soc_dapm_nc_pin(dapm, "OUT3");
+
+	snd_soc_dapm_new_controls(dapm, hmi335x_dapm_capture_widgets,
+			ARRAY_SIZE(hmi335x_dapm_capture_widgets ) );
+	snd_soc_dapm_new_controls(dapm, hmi335x_dapm_playback_widgets,
+			ARRAY_SIZE(hmi335x_dapm_playback_widgets ) );
+
+	snd_soc_dapm_add_routes(dapm, hmi335x_audio_map, 
+			ARRAY_SIZE(hmi335x_audio_map));
+
+	snd_soc_dapm_enable_pin(dapm, "Headphone Jack");
+	snd_soc_dapm_enable_pin(dapm, "Mic Jack");
+	snd_soc_dapm_enable_pin(dapm, "Speaker_L");
+	snd_soc_dapm_enable_pin(dapm, "Speaker_R");
+
+	snd_soc_dapm_disable_pin(dapm, "Line Input 3 (FM)");
+
+	dprintk("*%s(): dapm sync start\n", __FUNCTION__ );
+	snd_soc_dapm_sync( dapm );
+	dprintk("*%s(): dapm sync end\n", __FUNCTION__ );
+
+	dprintk("-%s()\n", __FUNCTION__ );
+	return 0;
+}
+#endif
 
 /* davinci-evm digital audio interface glue - connects codec <--> CPU */
 static struct snd_soc_dai_link dm6446_evm_dai = {
@@ -270,6 +449,7 @@ static struct snd_soc_dai_link am335x_evm_sk_dai = {
 	.ops = &evm_ops,
 };
 
+#ifdef CONFIG_MACH_IPC335X
 static struct snd_soc_dai_link ipc335x_evm_dai = {
 	.name = "TLV320AIC3X",
 	.stream_name = "AIC3X",
@@ -280,6 +460,18 @@ static struct snd_soc_dai_link ipc335x_evm_dai = {
 	.init = evm_aic3x_init,
 	.ops = &evm_ops,
 };
+
+static struct snd_soc_dai_link hmi335x_dai = {
+	.name = "WM8960",
+	.stream_name = "8960",
+	.cpu_dai_name = "davinci-mcasp.1",
+	.codec_dai_name = "wm8960-hifi",
+	.codec_name = "wm8960-codec.3-001a",
+	.platform_name = "davinci-pcm-audio",
+	.init = hmi335x_wm8960_init,
+	.ops = &hmi335x_wm8960_ops,
+};
+#endif
 
 /* davinci dm6446 evm audio machine driver */
 static struct snd_soc_card dm6446_snd_soc_card_evm = {
@@ -333,11 +525,19 @@ static struct snd_soc_card am335x_evm_sk_snd_soc_card = {
 	.num_links = 1,
 };
 
+#ifdef CONFIG_MACH_IPC335X
 static struct snd_soc_card ipc335x_snd_soc_card = {
 	.name = "IPC335X EVM",
 	.dai_link = &ipc335x_evm_dai,
 	.num_links = 1,
 };
+
+static struct snd_soc_card hmi335x_snd_soc_card = {
+	.name = "HMI335X",
+	.dai_link = &hmi335x_dai,
+	.num_links = 1,
+};
+#endif
 
 static struct platform_device *evm_snd_device;
 
@@ -372,10 +572,16 @@ static int __init evm_init(void)
 			evm_snd_dev_data = &am335x_evm_sk_snd_soc_card;
 #endif
 		index = 0;
-	} else if (machine_is_ipc335x()) {
+	}
+#ifdef CONFIG_MACH_IPC335X
+	else if (machine_is_ipc335x()) {
 		evm_snd_dev_data = &ipc335x_snd_soc_card;
+	if (ipc335x_dock_get_id() == HMI335X)
+		evm_snd_dev_data = &hmi335x_snd_soc_card;
 		index = 0;
-	} else
+	}
+#endif
+	else
 		return -EINVAL;
 
 	evm_snd_device = platform_device_alloc("soc-audio", index);

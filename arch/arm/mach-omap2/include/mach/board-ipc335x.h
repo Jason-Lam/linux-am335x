@@ -33,4 +33,8 @@
 #define PROFILE_7      (0x1 << 7)
 #define PROFILE_ALL        0xFF
 
+#ifndef __ASSEMBLER__
+int ipc335x_dock_get_id(void);
+void ipc33xx_cpsw_macidfillup(char *eeprommacid0, char *eeprommacid1);
+#endif
 #endif

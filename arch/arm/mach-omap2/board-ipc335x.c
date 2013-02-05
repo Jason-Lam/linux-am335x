@@ -67,31 +67,31 @@
 /* Convert GPIO signal to GPIO pin number */
 #define GPIO_TO_PIN(bank, gpio) (32 * (bank) + (gpio))
 
-static int ipc33xx_evmid = -EINVAL;
+static int ipc33xx_dockid = -EINVAL;
 
 /*
-** ipc335x_evm_set_id - set up board evmid
-** @evmid - evm id which needs to be configured
+** ipc335x_dock_set_id - set up board dockid
+** @dockid - dock id which needs to be configured
 **
-** This function is called to configure board evm id.
+** This function is called to configure board dock id.
 */
-void ipc335x_evm_set_id(unsigned int evmid)
+void ipc335x_dock_set_id(unsigned int dockid)
 {
-	ipc33xx_evmid = evmid;
+	ipc33xx_dockid = dockid;
 	return;
 }
 
 /*
-** ipc335x_evm_get_id - returns Board Type (EVM/IPC/HMI ...)
+** ipc335x_dock_get_id - returns Board Type (EVM/HMI ...)
 **
 ** Note:
 **	returns -EINVAL if Board detection hasn't happened yet.
 */
-int ipc335x_evm_get_id(void)
+int ipc335x_dock_get_id(void)
 {
-	return ipc33xx_evmid;
+	return ipc33xx_dockid;
 }
-EXPORT_SYMBOL(ipc335x_evm_get_id);
+EXPORT_SYMBOL(ipc335x_dock_get_id);
 
 /*
 ** Board Config held in On-Board eeprom device.
@@ -1240,6 +1240,8 @@ static void setup_ipc335x_core(int board_type, u8 profile_shift)
 
 static void setup_ipc335x_dock(int board_type, u8 profile_shift)
 {
+	ipc335x_dock_set_id(board_type);
+
 	switch(board_type){
 	case IPC335X_EVM:
 		pr_info("The board is IPC335X EVM in profile %d\n",

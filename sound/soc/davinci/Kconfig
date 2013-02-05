@@ -47,6 +47,7 @@ config  SND_IPC335X_SOC
 	depends on SND_AM33XX_SOC
 	select SND_DAVINCI_SOC_MCASP
 	select SND_SOC_TLV320AIC3X
+	select SND_SOC_WM8960
 	help
 	  Say Y if you want to add support for SoC audio on
 	  IPC335X
