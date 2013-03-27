@@ -309,7 +309,12 @@ static struct pinmux_config usb0_pin_mux[] = {
 
 /* pinmux for hmi335x 3v3 ctrl */
 static struct pinmux_config hmi335x_3v3_pin_mux[] = {
+	/*Board power ctrl*/
 	{"usb0_drvvbus.gpio0_18",    OMAP_MUX_MODE7 | AM33XX_PIN_OUTPUT},
+	/*usb hub Nrest*/
+	{"gpmc_clk.gpio2_1",    OMAP_MUX_MODE7 | AM33XX_PIN_OUTPUT},
+	/*wifi Npower*/
+	{"gpmc_ben1.gpio1_28",    OMAP_MUX_MODE7 | AM33XX_PIN_OUTPUT},
 	{NULL, 0},
 };
 
@@ -325,6 +330,8 @@ static void rgmii1_init(int board_type, u8 profile)
 }
 
 static int hmi335x_3v3_enable = -1;
+static int hmi335x_usb_reset =	-1;
+static int hmi335x_wifi_power_ctrl = -1;
 static void hmi_power_ctrl(int enable)
 {
     if(gpio_is_valid(hmi335x_3v3_enable)){
@@ -354,8 +361,22 @@ static void hmi335x_power_init(int board_type, u8 profile)
 	hmi335x_3v3_enable = GPIO_TO_PIN(0, 18),
 	setup_pin_mux(hmi335x_3v3_pin_mux);
 	gpio_request(hmi335x_3v3_enable, "dock_3v3power_enable");
-	gpio_direction_output(hmi335x_3v3_enable, 1);
+	gpio_direction_output(hmi335x_3v3_enable, 0);
 	//cpu_pm_register_notifier(&hmi335x_pm_notifier);
+	hmi335x_usb_reset = GPIO_TO_PIN(2, 1),
+	gpio_request(hmi335x_usb_reset, "dock_usb_Nreset");
+	/*Hub stay reset*/
+	gpio_direction_output(hmi335x_usb_reset, 0);
+	gpio_export(hmi335x_usb_reset, 0);
+
+	hmi335x_wifi_power_ctrl = GPIO_TO_PIN(1, 28),
+	gpio_request(hmi335x_wifi_power_ctrl, "hmi335x_wifi_Npower");
+	/*wifi power down*/
+	gpio_direction_output(hmi335x_wifi_power_ctrl, 1);
+	gpio_export(hmi335x_wifi_power_ctrl, 0);
+
+	gpio_direction_output(hmi335x_usb_reset, 1);
+	gpio_direction_output(hmi335x_wifi_power_ctrl, 0);
 }
 
 static void usb0_init(int board_type, u8 profile)
