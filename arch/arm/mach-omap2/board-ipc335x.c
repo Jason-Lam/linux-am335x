@@ -788,6 +788,19 @@ static int __init ecap2_init(void)
 }
 late_initcall(ecap2_init);
 
+static struct pinmux_config ehrpwm1b_pin_mux[] = {
+	{"gpmc_a3.ehrpwm1B", OMAP_MUX_MODE6 | AM33XX_PIN_OUTPUT},
+	{NULL, 0},
+};
+/* setup pwm beeper */
+#define PWMBEEPER_MAX_FREQ 20000
+static void pwm_beeper_init(int board_type, u8 profile)
+{
+	setup_pin_mux(ehrpwm1b_pin_mux);
+	pwm_pdata[2].chan_attrib[1].max_freq = PWMBEEPER_MAX_FREQ;
+	am33xx_register_ehrpwm(1, &pwm_pdata[2]);
+}
+
 static struct pinmux_config uart3_pin_mux[] = {
 	{"spi0_cs1.uart3_rxd", OMAP_MUX_MODE1 | AM33XX_PIN_INPUT_PULLUP},
 	{"ecap0_in_pwm0_out.uart3_txd", OMAP_MUX_MODE1 | AM33XX_PULL_ENBL},
@@ -1234,6 +1247,7 @@ static struct ipc335x_dev_cfg hmi335x_dev_cfg[] = {
 	{lcdc_init, HMI335X, PROFILE_0 | PROFILE_2},
 	{mfd_tscadc_init, HMI335X, PROFILE_0 | PROFILE_2},
 	{enable_ecap2, HMI335X, PROFILE_0 | PROFILE_2},
+	{pwm_beeper_init, HMI335X, PROFILE_ALL},
 	{NULL, 0, 0},
 };
 
